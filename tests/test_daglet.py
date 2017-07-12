@@ -126,8 +126,8 @@ def test_vertex_upstream_edges():
     e1 = daglet.Vertex('v1').edge('e1')
     e2 = daglet.Vertex('v3').edge('e2').reverse()
     v2 = daglet.Vertex('v2', [e1, e2])
-    assert v2.upstream_edges == [e1]
-    assert v2.downstream_edges == [e2]
+    assert v2.incoming_edges == [e1]
+    assert v2.outgoing_edges == [e2]
 
 
 def test_vertex_downstream_edges():

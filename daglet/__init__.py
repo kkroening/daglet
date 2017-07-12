@@ -50,11 +50,13 @@ class Edge(object):
 
     @property
     def short_repr(self):
-        return 'daglet.Edge({!r})'.format(self.__label)
+        upstream = repr(self.__upstream_vertex) if self.__upstream_vertex is not None else None
+        downstream = repr(self.__downstream_vertex) if self.__downstream_vertex is not None else None
+        return 'daglet.Edge({!r}, upstream_vertex={}, downstream_vertex={})'.format(self.__label, upstream, downstream)
 
     @property
     def short_hash(self):
-        return '{:x}'.format(abs(hash(self)))[:12]
+        return '{:x}'.format(abs(hash(self)))[:8]
 
     def __repr__(self):
         return '{} <{}>'.format(self.short_repr, self.short_hash)
@@ -102,12 +104,12 @@ class Vertex(object):
         return self.__edges
 
     @property
-    def upstream_edges(self):
-        return [x for x in self.__edges if x.upstream_vertex == self]
+    def incoming_edges(self):
+        return [x for x in self.__edges if x.upstream_vertex not in [None, self]]
 
     @property
-    def downstream_edges(self):
-        return [x for x in self.__edges if x.downstream_vertex == self]
+    def outgoing_edges(self):
+        return [x for x in self.__edges if x.downstream_vertex not in [None, self]]
 
     @property
     def label(self):
@@ -161,7 +163,7 @@ class Vertex(object):
 
     @property
     def short_hash(self):
-        return '{:x}'.format(abs(hash(self)))[:12]
+        return '{:x}'.format(abs(hash(self)))[:8]
 
     def __repr__(self):
         return '{} <{}>'.format(self.short_repr, self.short_hash)
