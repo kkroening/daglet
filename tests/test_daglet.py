@@ -130,10 +130,6 @@ def test_vertex_upstream_edges():
     assert v2.outgoing_edges == [e2]
 
 
-def test_vertex_downstream_edges():
-    pass  # FIXME
-
-
 def test_vertex_clone():
     assert daglet.Vertex('v1').clone(label='v2').label == 'v2'
 
