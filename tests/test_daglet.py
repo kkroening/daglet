@@ -3,83 +3,64 @@ from __future__ import unicode_literals
 import daglet
 
 
-def test_edge_eq_no_vertices_label_mismatch():
-    assert daglet.Edge('e1', None) != daglet.Edge('e2', None)
+def test_edge_eq_no_parents_match():
+    assert daglet.Edge('e1') == daglet.Edge('e1')
 
 
-def test_edge_eq_no_vertices_extra_hash_match():
-    assert daglet.Edge('e1', None, extra_hash=1) == daglet.Edge('e1', None, extra_hash=1)
+def test_edge_eq_no_parents_label_mismatch():
+    assert daglet.Edge('e1') != daglet.Edge('e2')
 
 
-def test_edge_eq_no_vertices_extra_hash_mismatch():
-    assert daglet.Edge('e1', None, extra_hash=1) != daglet.Edge('e1', None, extra_hash=2)
+def test_edge_eq_no_parents_extra_hash_match():
+    assert daglet.Edge('e1', extra_hash=1) == daglet.Edge('e1', extra_hash=1)
 
 
-def test_edge_eq_fully_connected_same():
-    assert daglet.Edge('e1', daglet.Vertex('v1'), daglet.Vertex('v2')) == \
-        daglet.Edge('e1', daglet.Vertex('v1'), daglet.Vertex('v2'))
+def test_edge_eq_no_parents_extra_hash_mismatch():
+    assert daglet.Edge('e1', extra_hash=1) != daglet.Edge('e1', extra_hash=2)
 
 
-def test_edge_eq_fully_connected_label_mismatch():
-    assert daglet.Edge('e1', daglet.Vertex('v1'), daglet.Vertex('v2')) != \
-        daglet.Edge('e2', daglet.Vertex('v1'), daglet.Vertex('v2'))
-
-
-def test_edge_eq_fully_upstream_vertex_mismatch():
-    assert daglet.Edge('e1', daglet.Vertex('v1'), daglet.Vertex('v2')) != \
-        daglet.Edge('e1', daglet.Vertex('v0'), daglet.Vertex('v2'))
-
-
-def test_edge_eq_fully_downstream_vertex_mismatch():
-    assert daglet.Edge('e1', daglet.Vertex('v1'), daglet.Vertex('v2')) != \
-        daglet.Edge('e1', daglet.Vertex('v1'), daglet.Vertex('v3'))
-
-
-def test_edge_eq_same():
+def test_edge_eq_match():
     assert daglet.Vertex('v1').edge('e1') == daglet.Vertex('v1').edge('e1')
+    assert daglet.Vertex('v1').edge('e1') == daglet.Edge('e1', daglet.Vertex('v1'))
 
 
 def test_edge_eq_label_mismatch():
     assert daglet.Vertex('v1').edge('e1') != daglet.Vertex('v1').edge('e2')
 
 
-def test_edge_eq_upstream_mismatch():
-    assert daglet.Vertex('v1').edge('e1') != daglet.Vertex('v1').edge('e2')
+def test_edge_eq_parent_mismatch():
+    assert daglet.Vertex('v1').edge('e1') != daglet.Vertex('v2').edge('e1')
 
 
-def test_edge_eq_reverse():
-    assert daglet.Vertex('v1').edge('e1').reverse() == daglet.Vertex('v1').edge('e1').reverse()
+def test_edge_eq_extra_hash_match():
+    assert daglet.Vertex('v1').edge('e1', extra_hash=1) == daglet.Vertex('v1').edge('e1', extra_hash=1)
 
 
-def test_edge_eq_reverse_reverse():
-    assert daglet.Vertex('v1').edge('e1').reverse().reverse() == daglet.Vertex('v1').edge('e1')
+def test_edge_eq_extra_hash_mismatch():
+    assert daglet.Vertex('v1').edge('e1', extra_hash=1) != daglet.Vertex('v1').edge('e1', extra_hash=2)
 
 
-def test_vertex_eq_no_edges_same():
+def test_vertex_eq_no_parents_match():
     assert daglet.Vertex('v1') == daglet.Vertex('v1')
 
 
-def test_vertex_eq_no_edges_label_mismatch():
+def test_vertex_eq_no_parents_label_mismatch():
     assert daglet.Vertex('v1') != daglet.Vertex('v2')
 
 
-def test_vertex_eq_no_edges_extra_hash_match():
+def test_vertex_eq_no_parents_extra_hash_match():
     assert daglet.Vertex('v1', extra_hash=1) == daglet.Vertex('v1', extra_hash=1)
 
 
-def test_vertex_eq_no_edges_extra_hash_mismatch():
+def test_vertex_eq_no_parents_extra_hash_mismatch():
     assert daglet.Vertex('v1', extra_hash=1) != daglet.Vertex('v1', extra_hash=2)
 
 
-def test_edge_eq_no_vertices_same():
-    assert daglet.Edge('e1', None) == daglet.Edge('e1', None)
-
-
-def test_vertex_eq_same_one_incoming_edge():
+def test_vertex_eq_match():
     assert daglet.Vertex('v1').edge('e1').vertex('v2') == daglet.Vertex('v1').edge('e1').vertex('v2')
 
 
-def test_vertex_eq_multi_incoming_same():
+def test_vertex_eq_multiple_parents_match():
     v3a = (daglet.Vertex('v3', [
         daglet.Vertex('v1').edge('e1'),
         daglet.Vertex('v2').edge('e2')
@@ -91,7 +72,7 @@ def test_vertex_eq_multi_incoming_same():
     assert v3a == v3b
 
 
-def test_vertex_eq_multi_incoming_wrong_order():
+def test_vertex_eq_multiple_parents_wrong_order():
     v3a = (daglet.Vertex('v3', [
         daglet.Vertex('v1').edge('e1'),
         daglet.Vertex('v2').edge('e2')
@@ -111,23 +92,9 @@ def test_vertex_edge_mismatch():
     assert daglet.Vertex('v1').edge('e1').vertex('v2') != daglet.Vertex('v1').edge('e2').vertex('v2')
 
 
-def test_vertex_reversed_edge_match():
-    assert daglet.Vertex('v1').edge('e1').reverse().vertex('v2') != \
-        daglet.Vertex('v1').edge('e1').reverse().vertex('v2')
-
-
-def test_vertex_reversed_edge_mismatch():
-    assert daglet.Vertex('v1').edge('e1').reverse().vertex('v2') != \
-        daglet.Vertex('v1').edge('e2').reverse().vertex('v2')
-
-
-def test_vertex_upstream_edges():
-    daglet.Edge('e1', daglet.Vertex('v1'), daglet.Vertex('v2'))
-    e1 = daglet.Vertex('v1').edge('e1')
-    e2 = daglet.Vertex('v3').edge('e2').reverse()
-    v2 = daglet.Vertex('v2', [e1, e2])
-    assert v2.incoming_edges == [e1]
-    assert v2.outgoing_edges == [e2]
+def test_edge_clone():
+    # FIXME
+    pass
 
 
 def test_vertex_clone():
@@ -136,7 +103,7 @@ def test_vertex_clone():
 
 def test_vertex_transplant():
     v2 = daglet.Vertex('v2')
-    assert daglet.Vertex('v1').transplant([v2]).edges == [v2]
+    assert daglet.Vertex('v1').transplant([v2]).parents == [v2]
 
 
 def test_vertex_short_repr():
