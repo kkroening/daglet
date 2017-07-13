@@ -5,15 +5,19 @@ from builtins import object
 import copy
 
 
+def _quote_arg(arg):
+    return "'{}'".format(str(arg).replace("'", "\\'"))
+
+
 def _arg_kwarg_repr(args, kwargs):
-    items = ['{!r}'.format(arg) for arg in args]
-    items += ['{}={!r}'.format(key, kwargs[key]) for key in sorted(kwargs)]
+    items = ['{}'.format(arg) for arg in args]
+    items += ['{}={}'.format(key, kwargs[key]) for key in sorted(kwargs)]
     return ', '.join(items)
 
 
 class Edge(object):
     """Connection to one or more vertices in a directed-acyclic graph (DAG)."""
-    def __init__(self, label, parent=None, extra_hash=None):
+    def __init__(self, label=None, parent=None, extra_hash=None):
         self.__label = label
         self.__parent = parent
         self.__extra_hash = extra_hash
@@ -22,6 +26,47 @@ class Edge(object):
     @property
     def label(self):
         return self.__label
+
+    @property
+    def parent(self):
+        return self.__parent
+
+    @property
+    def extra_hash(self):
+        return self.__extra_hash
+
+    def __hash__(self):
+        return self.__hash
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+    @property
+    def short_hash(self):
+        return '{:x}'.format(abs(hash(self)))[:8]
+
+    def get_repr(self, short=False, include_hash=True):
+        args = []
+        kwargs = {}
+        if self.__label:
+            args.append(_quote_arg(self.__label))
+
+        if short:
+            if self.__parent:
+                args.append('...')
+        else:
+            if self.__parent:
+                if len(args) == 0:
+                    args.append(None)
+                args.append(self.__parent.get_repr(True, include_hash))
+
+        ret = 'daglet.Edge({})'.format(_arg_kwarg_repr(args, kwargs))
+        if include_hash:
+            ret = '{} <{}>'.format(ret, self.short_hash)
+        return ret
+
+    def __repr__(self):
+        return self.get_repr()
 
     def clone(self, **kwargs):
         base_kwargs = {
@@ -32,34 +77,7 @@ class Edge(object):
         base_kwargs.update(kwargs)
         return Edge(**base_kwargs)
 
-    @property
-    def parent(self):
-        return self.__parent
-
-    def __hash__(self):
-        return self.__hash
-
-    def __eq__(self, other):
-        return hash(self) == hash(other)
-
-    @property
-    def short_repr(self):
-        args = [self.__label]
-        kwargs = {}
-        if self.__parent is not None:
-            kwargs['parent'] = repr(self.__parent)
-        if self.__extra_hash is not None:
-            kwargs['extra_hash'] = self.__extra_hash
-        return 'daglet.Vertex({})'.format(_arg_kwarg_repr(args, kwargs))
-
-    @property
-    def short_hash(self):
-        return '{:x}'.format(abs(hash(self)))[:8]
-
-    def __repr__(self):
-        return '{} <{}>'.format(self.short_repr, self.short_hash)
-
-    def vertex(self, label, extra_hash=None):
+    def vertex(self, label=None, extra_hash=None):
         return Vertex(label, [self], extra_hash)
 
 
@@ -72,7 +90,7 @@ class Vertex(object):
         Vertices are immutable, and the hash should remain constant as a result.  If a vertex with new contents is
         required, create a new vertex and throw the old one away.
     """
-    def __init__(self, label, parents=[], extra_hash=None):
+    def __init__(self, label=None, parents=[], extra_hash=None):
         self.__parents = parents
         self.__label = label
         self.__extra_hash = extra_hash
@@ -95,6 +113,34 @@ class Vertex(object):
 
     def __eq__(self, other):
         return hash(self) == hash(other)
+
+    @property
+    def short_hash(self):
+        return '{:x}'.format(abs(hash(self)))[:8]
+
+    def get_repr(self, short=False, include_hash=True):
+        args = []
+        kwargs = {}
+        if self.__label:
+            args.append(_quote_arg(self.__label))
+
+        if short:
+            if self.__parents:
+                args.append('...')
+        else:
+            if self.__parents:
+                if len(args) == 0:
+                    args.append(None)
+                parent_reprs = [p.get_repr(True, include_hash) for p in self.__parents]
+                args.append('[{}]'.format(', '.join(parent_reprs)))
+
+        ret = 'daglet.Vertex({})'.format(_arg_kwarg_repr(args, kwargs))
+        if include_hash:
+            ret = '{} <{}>'.format(ret, self.short_hash)
+        return ret
+
+    def __repr__(self):
+        return self.get_repr()
 
     def clone(self, **kwargs):
         base_kwargs = {
@@ -123,21 +169,6 @@ class Vertex(object):
             ```
         """
         return Edge(label, self, extra_hash)
-
-    @property
-    def short_repr(self):
-        args = [self.__label]
-        kwargs = {}
-        if self.__extra_hash is not None:
-            kwargs['extra_hash'] = self.__extra_hash
-        return 'daglet.Vertex({})'.format(_arg_kwarg_repr(args, kwargs))
-
-    @property
-    def short_hash(self):
-        return '{:x}'.format(abs(hash(self)))[:8]
-
-    def __repr__(self):
-        return '{} <{}>'.format(self.short_repr, self.short_hash)
 
 
 def sort(edges):
