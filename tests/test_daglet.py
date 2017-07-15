@@ -1,6 +1,8 @@
 from __future__ import unicode_literals
 
 import daglet
+import itertools
+import json
 
 
 def test_edge_label():
@@ -224,7 +226,7 @@ def test_analyze():
         v8: {v8.edge()},
         v9: set(),
         v10: set(),
-        v11: set()
+        v11: set(),
     }
     assert edge_child_map == {
         v3.edge(0): {v4},
@@ -236,3 +238,94 @@ def test_analyze():
         v7.edge(): {v9},
         v8.edge(): {v10},
     }
+
+
+def test_composition():
+    class Stream(object):
+        def __init__(self, parent_node, upstream_id):
+            self.parent_node = parent_node
+            self.upstream_id = upstream_id
+
+        def __filter(self, name, args=[]):
+            """Create single-output filter."""
+            return Filter([self], name, args).stream(0)
+
+        def hflip(self):
+            return self.__filter('hflip')
+
+        def vflip(self):
+            return self.__filter('vflip')
+
+        def overlay(self, overlay_stream):
+            return Filter([self, overlay_stream], 'overlay').stream(0)
+
+        def split(self):
+            return Filter([self], 'split')
+
+        def output(self, filename):
+            return Output(self, filename)
+
+    class Node(object):
+        def __init__(self, streams, name, args=[]):
+            self.streams = streams
+            self.name = name
+            self.args = args
+
+        def get_parent_nodes(self):
+            return [x.parent_node for x in self.streams]
+
+        def get_dag_vertex(self, parent_vertices):
+            edges = []
+            for downstream_id, stream, vertex in zip(itertools.count(), self.streams, parent_vertices):
+                label = '{} -> {}'.format(stream.upstream_id, downstream_id)
+                edges.append(vertex.edge(label))
+            label = '{}({})'.format(self.name, ', '.join([json.dumps(x) for x in self.args]))
+            return daglet.Vertex(label, edges)
+
+    class Input(Node):
+        def __init__(self, filename):
+            super(Input, self).__init__([], 'input', [filename])
+
+        def stream(self, upstream_id):
+            return Stream(self, upstream_id)
+
+    class Filter(Node):
+        def stream(self, upstream_id):
+            return Stream(self, upstream_id)
+
+    class Output(Node):
+        def __init__(self, stream, filename):
+            super(Output, self).__init__([stream], 'output', [filename])
+
+    def input(filename):
+        return Input(filename).stream(0)
+
+    def concat(*streams):
+        return Filter(streams, 'concat').stream(0)
+
+    def compile(outputs):
+        for output in outputs:
+            assert isinstance(Output, output)
+        vertices = [x.dag_vertex for x in outputs]
+        # TODO: get mapping
+        vertices, vertex_child_map, edge_child_map = daglet.analyze(vertices)
+
+    def get_dag(nodes):
+        return daglet.map_object_graph(nodes, Node.get_parent_nodes, Node.get_dag_vertex)
+
+    identity = input('in.mp4').output('out.mp4')
+
+    flipped = input('in.mp4').hflip().output('out.mp4')
+    overlay = input('overlay.png').hflip()
+    overlayed = input('in.mp4').overlay(overlay)
+    out = (concat(
+            overlayed.split().stream(0).vflip(),
+            overlayed.split().stream(1),
+        )
+        .output('out.mp4')
+    )
+
+    n, cm, vm = get_dag([out])
+    print n
+    print cm
+    print vm

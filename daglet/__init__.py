@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+import itertools
 from ._utils import get_hash_int
 from builtins import object
 import copy
@@ -188,33 +189,65 @@ class Vertex(object):
         return Edge(label, self, extra_hash)
 
 
-def analyze(vertices):
-    marked_vertices = []
-    sorted_vertices = []
-    vertex_child_map = {}
-    edge_child_map = {}
+def map_object_graph(objs, start_func, finish_func=None):
+    marked_objs = set()
+    sorted_objs = []
+    child_map = {}
+    value_map = {}
 
-    def visit(vertex, child_edge):
-        if vertex in marked_vertices:
+    def visit(obj, child_obj):
+        if obj in marked_objs:
+            # TODO: optionally break cycles.
             raise RuntimeError('Graph is not a DAG')
 
-        vertex_children = vertex_child_map.get(vertex, set())
-        if child_edge is not None:
-            vertex_children.add(child_edge)
-        vertex_child_map[vertex] = vertex_children
+        children = child_map.get(obj, set())
+        if child_obj is not None:
+            children.add(child_obj)
+        child_map[obj] = children
 
-        if vertex not in sorted_vertices:
-            marked_vertices.append(vertex)
-            for edge in vertex.parents:
-                edge_children = edge_child_map.get(edge, set())
-                edge_children.add(vertex)
-                edge_child_map[edge] = edge_children
-                visit(edge.parent, edge)
-            marked_vertices.remove(vertex)
-            sorted_vertices.append(vertex)
+        if obj not in sorted_objs:
+            parent_objs = start_func(obj)
 
-    unvisited_vertices = copy.copy(vertices)
-    while unvisited_vertices:
-        vertex = unvisited_vertices.pop()
-        visit(vertex, child_edge=None)
-    return sorted_vertices, vertex_child_map, edge_child_map
+            marked_objs.add(obj)
+            for parent_obj in parent_objs:
+                visit(parent_obj, obj)
+            marked_objs.remove(obj)
+
+            sorted_objs.append(obj)
+            parent_values = [value_map[parent_obj] for parent_obj in parent_objs]
+            if finish_func is not None:
+                value = finish_func(obj, parent_values)
+            else:
+                value = None
+            value_map[obj] = value
+
+    unvisited_objs = copy.copy(objs)
+    while unvisited_objs:
+        obj = unvisited_objs.pop()
+        visit(obj, None)
+    return sorted_objs, child_map, value_map
+
+
+def convert_obj_graph_to_dag(objs, get_parents_func):
+    def finish(obj, parent_vertices, repr_func=repr):
+        edges = [v.edge() for v in parent_vertices]
+        return Vertex(edges, repr_func(obj))
+    _, _, value_map = map_object_graph(objs, get_parents_func, finish)
+    return [value_map[obj] for obj in objs]
+
+
+def analyze(vertices):
+    def start_func(vertex_or_edge):
+        if isinstance(vertex_or_edge, Vertex):
+            return vertex_or_edge.parents
+        elif isinstance(vertex_or_edge, Edge):
+            return [vertex_or_edge.parent]
+        else:
+            raise TypeError('Expected daglet.Vertex or daglet.Edge instance; got {}'.format(vertex_or_edge))
+
+    sorted_objs, child_map, _ = map_object_graph(vertices, start_func)
+    vertices = [obj for obj in sorted_objs if isinstance(obj, Vertex)]
+    edges = [obj for obj in sorted_objs if isinstance(obj, Edge)]
+    vertex_child_map = {v: child_map[v] for v in vertices}
+    edge_child_map = {e: child_map[e] for e in edges}
+    return vertices, vertex_child_map, edge_child_map
