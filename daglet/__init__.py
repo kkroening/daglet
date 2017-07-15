@@ -1,9 +1,12 @@
 from __future__ import unicode_literals
 
-import itertools
+from .view import view
 from ._utils import get_hash_int
 from builtins import object
 import copy
+
+
+(view)  # silence linter
 
 
 def _quote_arg(arg):
@@ -231,23 +234,28 @@ def map_object_graph(objs, start_func, finish_func=None):
 def convert_obj_graph_to_dag(objs, get_parents_func):
     def finish(obj, parent_vertices, repr_func=repr):
         edges = [v.edge() for v in parent_vertices]
-        return Vertex(edges, repr_func(obj))
+        return Vertex(repr_func(obj), edges)
     _, _, value_map = map_object_graph(objs, get_parents_func, finish)
     return [value_map[obj] for obj in objs]
 
 
-def analyze(vertices):
-    def start_func(vertex_or_edge):
-        if isinstance(vertex_or_edge, Vertex):
-            return vertex_or_edge.parents
-        elif isinstance(vertex_or_edge, Edge):
-            return [vertex_or_edge.parent]
-        else:
-            raise TypeError('Expected daglet.Vertex or daglet.Edge instance; got {}'.format(vertex_or_edge))
+def _get_vertex_or_edge_parents(vertex_or_edge):
+    if isinstance(vertex_or_edge, Vertex):
+        return vertex_or_edge.parents
+    elif isinstance(vertex_or_edge, Edge):
+        return [vertex_or_edge.parent]
+    else:
+        raise TypeError('Expected daglet.Vertex or daglet.Edge instance; got {}'.format(vertex_or_edge))
 
-    sorted_objs, child_map, _ = map_object_graph(vertices, start_func)
+
+def analyze(vertices):
+    sorted_objs, child_map, _ = map_object_graph(vertices, _get_vertex_or_edge_parents)
     vertices = [obj for obj in sorted_objs if isinstance(obj, Vertex)]
     edges = [obj for obj in sorted_objs if isinstance(obj, Edge)]
     vertex_child_map = {v: child_map[v] for v in vertices}
     edge_child_map = {e: child_map[e] for e in edges}
     return vertices, vertex_child_map, edge_child_map
+
+
+def invert_dict(d):
+    return {v: k for k, v in d.items()}

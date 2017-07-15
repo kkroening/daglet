@@ -313,6 +313,17 @@ def test_composition():
     def get_dag(nodes):
         return daglet.map_object_graph(nodes, Node.get_parent_nodes, Node.get_dag_vertex)
 
+    def get_node_color(node):
+        if isinstance(node, Input):
+            color = '#99cc00'
+        elif isinstance(node, Output):
+            color = '#99ccff'
+        elif isinstance(node, Filter):
+            color = '#ffcc00'
+        else:
+            color = None
+        return color
+
     identity = input('in.mp4').output('out.mp4')
 
     flipped = input('in.mp4').hflip().output('out.mp4')
@@ -324,8 +335,14 @@ def test_composition():
         )
         .output('out.mp4')
     )
+    daglet.view(daglet.convert_obj_graph_to_dag([out], Node.get_parent_nodes))
+    nodes, _, node_vertex_map = get_dag([out])
 
-    n, cm, vm = get_dag([out])
-    print n
-    print cm
-    print vm
+    vertex_node_map = {v: k for k, v in node_vertex_map.items()}
+    color_map = {node_vertex_map[n]: get_node_color(n) for n in nodes}
+    def get_vertex_color(vertex):
+        return get_node_color(vertex_node_map[vertex])
+    #daglet.view(node_vertex_map.values(), color_func=color_map.get)
+    daglet.view(node_vertex_map.values(), color_func=get_vertex_color)
+
+    #daglet.view(daglet.convert_obj_graph_to_dag(vertex_node_map.values(), daglet._get_vertex_or_edge_parents))
