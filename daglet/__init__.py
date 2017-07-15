@@ -9,7 +9,7 @@ def _quote_arg(arg):
     return "'{}'".format(str(arg).replace("'", "\\'"))
 
 
-def _arg_kwarg_repr(args, kwargs):
+def _arg_kwarg_repr(args=[], kwargs={}):
     items = ['{}'.format(arg) for arg in args]
     items += ['{}={}'.format(key, kwargs[key]) for key in sorted(kwargs)]
     return ', '.join(items)
@@ -18,9 +18,11 @@ def _arg_kwarg_repr(args, kwargs):
 class Edge(object):
     """Connection to one or more vertices in a directed-acyclic graph (DAG)."""
     def __init__(self, label=None, parent=None, extra_hash=None):
-        self.__label = label
-        self.__parent = parent
-        self.__extra_hash = extra_hash
+        if not isinstance(parent, Vertex):
+            raise TypeError('Expected Vertex instance; got {}'.format(parent))
+        self.__label = copy.copy(label)
+        self.__parent = copy.copy(parent)
+        self.__extra_hash = copy.copy(extra_hash)
         self.__hash = get_hash_int([label, parent, extra_hash])
 
     @property
@@ -38,29 +40,35 @@ class Edge(object):
     def __hash__(self):
         return self.__hash
 
+    def __lt__(self, other):
+        return hash(self) < hash(other)
+
+    def __le__(self, other):
+        return hash(self) <= hash(other)
+
     def __eq__(self, other):
         return hash(self) == hash(other)
+
+    def __ne__(self, other):
+        return hash(self) != hash(other)
+
+    def __ge__(self, other):
+        return hash(self) >= hash(other)
+
+    def __gt__(self, other):
+        return hash(self) > hash(other)
 
     @property
     def short_hash(self):
         return '{:x}'.format(abs(hash(self)))[:8]
 
-    def get_repr(self, short=False, include_hash=True):
+    def get_repr(self, include_hash=True):
         args = []
-        kwargs = {}
-        if self.__label:
-            args.append(_quote_arg(self.__label))
-
-        if short:
-            if self.__parent:
-                args.append('...')
-        else:
-            if self.__parent:
-                if len(args) == 0:
-                    args.append(None)
-                args.append(self.__parent.get_repr(True, include_hash))
-
-        ret = 'daglet.Edge({})'.format(_arg_kwarg_repr(args, kwargs))
+        if self.__label is not None:
+            args.append(repr(self.__label))
+        if self.__parent or self.__extra_hash:
+            args.append('...')
+        ret = 'daglet.Edge({})'.format(_arg_kwarg_repr(args))
         if include_hash:
             ret = '{} <{}>'.format(ret, self.short_hash)
         return ret
@@ -91,9 +99,13 @@ class Vertex(object):
         required, create a new vertex and throw the old one away.
     """
     def __init__(self, label=None, parents=[], extra_hash=None):
+        for parent in parents:
+            if not isinstance(parent, Edge):
+                raise TypeError('Expected Edge instance; got {}'.format(parent))
+        parents = sorted(parents)
         self.__parents = parents
-        self.__label = label
-        self.__extra_hash = extra_hash
+        self.__label = copy.copy(label)
+        self.__extra_hash = copy.copy(extra_hash)
         self.__hash = get_hash_int([label, parents, extra_hash])
 
     @property
@@ -111,30 +123,35 @@ class Vertex(object):
     def __hash__(self):
         return self.__hash
 
+    def __lt__(self, other):
+        return hash(self) < hash(other)
+
+    def __le__(self, other):
+        return hash(self) <= hash(other)
+
     def __eq__(self, other):
         return hash(self) == hash(other)
+
+    def __ne__(self, other):
+        return hash(self) != hash(other)
+
+    def __ge__(self, other):
+        return hash(self) >= hash(other)
+
+    def __gt__(self, other):
+        return hash(self) > hash(other)
 
     @property
     def short_hash(self):
         return '{:x}'.format(abs(hash(self)))[:8]
 
-    def get_repr(self, short=False, include_hash=True):
+    def get_repr(self, include_hash=True):
         args = []
-        kwargs = {}
-        if self.__label:
-            args.append(_quote_arg(self.__label))
-
-        if short:
-            if self.__parents:
-                args.append('...')
-        else:
-            if self.__parents:
-                if len(args) == 0:
-                    args.append(None)
-                parent_reprs = [p.get_repr(True, include_hash) for p in self.__parents]
-                args.append('[{}]'.format(', '.join(parent_reprs)))
-
-        ret = 'daglet.Vertex({})'.format(_arg_kwarg_repr(args, kwargs))
+        if self.__label is not None:
+            args.append(repr(self.__label))
+        if self.__parents or self.__extra_hash:
+            args.append('...')
+        ret = 'daglet.Vertex({})'.format(_arg_kwarg_repr(args))
         if include_hash:
             ret = '{} <{}>'.format(ret, self.short_hash)
         return ret
@@ -171,28 +188,33 @@ class Vertex(object):
         return Edge(label, self, extra_hash)
 
 
-def sort(edges):
+def analyze(vertices):
     marked_vertices = []
     sorted_vertices = []
-    node_child_map = {}
+    vertex_child_map = {}
+    edge_child_map = {}
 
-    def visit(edge):
-        if edge.upstream_vertex in marked_vertices:
+    def visit(vertex, child_edge):
+        if vertex in marked_vertices:
             raise RuntimeError('Graph is not a DAG')
 
-        node_children = node_child_map.get(edge.parent, [])
-        node_children.append(edge)
-        node_child_map[edge.parent] = node_children
+        vertex_children = vertex_child_map.get(vertex, set())
+        if child_edge is not None:
+            vertex_children.add(child_edge)
+        vertex_child_map[vertex] = vertex_children
 
-        if edge.parent not in sorted_vertices:
-            marked_vertices.append(edge.parent)
-            for edge in edge.parent.edges:
-                visit(edge)
-            marked_vertices.remove(edge.parent)
-            sorted_vertices.append(edge.parent)
+        if vertex not in sorted_vertices:
+            marked_vertices.append(vertex)
+            for edge in vertex.parents:
+                edge_children = edge_child_map.get(edge, set())
+                edge_children.add(vertex)
+                edge_child_map[edge] = edge_children
+                visit(edge.parent, edge)
+            marked_vertices.remove(vertex)
+            sorted_vertices.append(vertex)
 
-    unvisited_edges = copy.copy(edges)
-    while unvisited_edges:
-        edge = unvisited_edges.pop()
-        visit(edge)
-    return sorted_vertices, node_child_map
+    unvisited_vertices = copy.copy(vertices)
+    while unvisited_vertices:
+        vertex = unvisited_vertices.pop()
+        visit(vertex, child_edge=None)
+    return sorted_vertices, vertex_child_map, edge_child_map
