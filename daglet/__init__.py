@@ -231,8 +231,8 @@ def map_object_graph(objs, start_func, finish_func=None):
     return sorted_objs, child_map, value_map
 
 
-def convert_obj_graph_to_dag(objs, get_parents_func):
-    def finish(obj, parent_vertices, repr_func=repr):
+def convert_obj_graph_to_dag(objs, get_parents_func, repr_func=repr):
+    def finish(obj, parent_vertices):
         edges = [v.edge() for v in parent_vertices]
         return Vertex(repr_func(obj), edges)
     _, _, value_map = map_object_graph(objs, get_parents_func, finish)

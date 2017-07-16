@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+import subprocess
 import daglet
 import itertools
 import json
@@ -324,6 +325,8 @@ def test_composition():
             color = None
         return color
 
+    return
+
     identity = input('in.mp4').output('out.mp4')
 
     flipped = input('in.mp4').hflip().output('out.mp4')
@@ -346,3 +349,19 @@ def test_composition():
     daglet.view(node_vertex_map.values(), color_func=get_vertex_color)
 
     #daglet.view(daglet.convert_obj_graph_to_dag(vertex_node_map.values(), daglet._get_vertex_or_edge_parents))
+
+
+def test_git():
+    cwd = '/Users/karlk/src/ffmpeg_wrapper'
+    def get_parent_hashes(commit_hash):
+        return (subprocess
+            .check_output(['git', 'rev-list', '--parents', '-n1', commit_hash], cwd=cwd)
+            .strip()
+            .split(' ')[1:]
+        )
+
+    def get_commit_repr(commit_hash):
+        return subprocess.check_output(['git', 'log', '-n1', '--pretty=short', commit_hash], cwd=cwd)
+
+    dag = daglet.convert_obj_graph_to_dag(['HEAD'], get_parent_hashes, get_commit_repr)
+    daglet.view(dag, rankdir=None)

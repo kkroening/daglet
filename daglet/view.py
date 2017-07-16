@@ -20,7 +20,7 @@ _RIGHT_ARROW = '\u2192'
 #    return color
 
 
-def view(vertices, filename=None, show_labels=True, color_func={}.get):
+def view(vertices, filename=None, show_labels=True, color_func={}.get, rankdir='LR'):
     try:
         import graphviz
     except ImportError:
@@ -32,7 +32,7 @@ def view(vertices, filename=None, show_labels=True, color_func={}.get):
 
     sorted_vertices, vertex_child_map, edge_child_map = daglet.analyze(vertices)
     graph = graphviz.Digraph()
-    graph.attr(rankdir='LR')
+    graph.attr(rankdir=rankdir)
 
     for vertex in sorted_vertices:
         #color = _get_vertex_color(vertex)
