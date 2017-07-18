@@ -4,6 +4,7 @@ from .view import view
 from ._utils import get_hash_int
 from builtins import object
 import copy
+import operator
 
 
 (view)  # silence linter
@@ -231,12 +232,25 @@ def map_object_graph(objs, start_func, finish_func=None):
     return sorted_objs, child_map, value_map
 
 
-def convert_obj_graph_to_dag(objs, get_parents_func, repr_func=repr):
+def convert_obj_graph_to_dag(objs, get_parents_func, repr_func=repr, edge_label_func=None):
+    def start(obj):
+        parents = get_parents_func(obj)
+        if isinstance(parents, dict):
+            parents = reduce(operator.add, parents.values(), [])
+        return parents
+
     def finish(obj, parent_vertices):
-        edges = [v.edge() for v in parent_vertices]
+        parents = get_parents_func(obj)
+        if isinstance(parents, dict):
+            labels = parents.keys()
+            labels = reduce(operator.add, [[k] * len(v) for k, v in parents.items()], [])
+        else:
+            labels = [None] * len(parent_vertices)
+        edges = [v.edge(l) for v, l in zip(parent_vertices, labels)]
         return Vertex(repr_func(obj), edges)
-    _, _, value_map = map_object_graph(objs, get_parents_func, finish)
-    return [value_map[obj] for obj in objs]
+
+    _, _, value_map = map_object_graph(objs, start, finish)
+    return value_map
 
 
 def _get_vertex_or_edge_parents(vertex_or_edge):
@@ -257,5 +271,77 @@ def analyze(vertices):
     return vertices, vertex_child_map, edge_child_map
 
 
+class Dag(object):
+    def __init__(self, vertices):
+        vertices, vertex_child_map, edge_child_map = analyze(vertices)
+        self.__vertices = vertices
+        self.__vertex_child_map = vertex_child_map
+        self.__edge_child_map = edge_child_map
+
+    @property
+    def vertices(self):
+        return self.__vertices
+
+    @property
+    def vertex_child_map(self):
+        return self.__vertex_child_map
+
+    @property
+    def edge_child_map(self):
+        return self.__edge_child_map
+
+    def map(self, func):
+        out = {}
+        for vertex in self.__vertices:
+            out[vertex] = func(vertex)
+        return out
+
+
+def _get_vertex_parent_vertices(vertex):
+    return [edge.parent for edge in vertex.parents]
+
+
+def convert_dag_to_obj_graph(vertices, visit_vertex_func):
+    return map_object_graph(vertices, _get_vertex_or_edge_parents, visit_vertex_func)
+
+
 def invert_dict(d):
     return {v: k for k, v in d.items()}
+
+
+# TODO: possibly move to transformations.py.
+#def rebase(downstream_vertices, new_base,
+#    ...
+
+
+
+class Scheduler(object):
+    def __init__(self, vertices):
+        self.__dag = Dag(vertices)
+        self.__ready_edges = set()
+        self.__started_vertices = set()
+        self.__finished_vertices = set()
+
+    def __is_vertex_ready(self, vertex):
+        return all(x in self.__ready_edges for x in vertex.parents)
+
+    def finish(self, vertex):
+        assert vertex in self.__started_vertices
+        assert vertex not in self.__finished_vertices
+        self.__finished_vertices.add(vertex)
+        self.__ready_edges.update(self.__dag.vertex_child_map[vertex])
+
+    def start(self, limit=None):
+        vertices = [x for x in self.__dag.vertices if x not in self.__started_vertices and
+            self.__is_vertex_ready(x)]
+        if limit is not None:
+            vertices = vertices[:limit]
+        self.__started_vertices.update(vertices)
+        return set(vertices)
+
+    @property
+    def done(self):
+        return len(self.__finished_vertices) == len(self.__dag.vertices)
+
+    def running_vertices(self):
+        return self.__started_vertices.difference(self.__finished_vertices)
