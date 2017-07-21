@@ -20,80 +20,6 @@ def _arg_kwarg_repr(args=[], kwargs={}):
     return ', '.join(items)
 
 
-class Edge(object):
-    """Connection to one or more vertices in a directed-acyclic graph (DAG)."""
-    def __init__(self, label=None, parent=None, extra_hash=None):
-        if not isinstance(parent, Vertex):
-            raise TypeError('Expected Vertex instance; got {}'.format(parent))
-        self.__label = copy.copy(label)
-        self.__parent = copy.copy(parent)
-        self.__extra_hash = copy.copy(extra_hash)
-        self.__hash = get_hash_int([label, parent, extra_hash])
-
-    @property
-    def label(self):
-        return self.__label
-
-    @property
-    def parent(self):
-        return self.__parent
-
-    @property
-    def extra_hash(self):
-        return self.__extra_hash
-
-    def __hash__(self):
-        return self.__hash
-
-    def __lt__(self, other):
-        return hash(self) < hash(other)
-
-    def __le__(self, other):
-        return hash(self) <= hash(other)
-
-    def __eq__(self, other):
-        return hash(self) == hash(other)
-
-    def __ne__(self, other):
-        return hash(self) != hash(other)
-
-    def __ge__(self, other):
-        return hash(self) >= hash(other)
-
-    def __gt__(self, other):
-        return hash(self) > hash(other)
-
-    @property
-    def short_hash(self):
-        return '{:x}'.format(abs(hash(self)))[:8]
-
-    def get_repr(self, include_hash=True):
-        args = []
-        if self.__label is not None:
-            args.append(repr(self.__label))
-        if self.__parent or self.__extra_hash:
-            args.append('...')
-        ret = 'daglet.Edge({})'.format(_arg_kwarg_repr(args))
-        if include_hash:
-            ret = '{} <{}>'.format(ret, self.short_hash)
-        return ret
-
-    def __repr__(self):
-        return self.get_repr()
-
-    def clone(self, **kwargs):
-        base_kwargs = {
-            'label': self.__label,
-            'parent': self.__parent,
-            'extra_hash': self.__extra_hash,
-        }
-        base_kwargs.update(kwargs)
-        return Edge(**base_kwargs)
-
-    def vertex(self, label=None, extra_hash=None):
-        return Vertex(label, [self], extra_hash)
-
-
 class Vertex(object):
     """Vertex in a directed-acyclic graph (DAG).
 
@@ -105,8 +31,8 @@ class Vertex(object):
     """
     def __init__(self, label=None, parents=[], extra_hash=None):
         for parent in parents:
-            if not isinstance(parent, Edge):
-                raise TypeError('Expected Edge instance; got {}'.format(parent))
+            if not isinstance(parent, Vertex):
+                raise TypeError('Expected Vertex instance; got {}'.format(parent))
         parents = sorted(parents)
         self.__parents = parents
         self.__label = copy.copy(label)
@@ -177,20 +103,16 @@ class Vertex(object):
         """Create a copy of this Vertex with new parent edges."""
         return Vertex(self.__label, new_parents, self.__extra_hash)
 
-    def edge(self, label=None, extra_hash=None):
-        """Create edge with specified label.
+    def vertex(self, label=None, extra_hash=None):
+        """Create downstream vertex with specified label.
 
         Example:
             The following example creates a DAG with three vertices connected with two edges (``n1 -> n2 -> n3``):
             ```
-            n3 = (daglet
-                .Vertex('n1').edge('e1')
-                .vertex('n2').edge('e2')
-                .vertex('n3')
-            )
+            n3 = daglet.Vertex('n1').vertex('n2').vertex('n3')
             ```
         """
-        return Edge(label, self, extra_hash)
+        return Vertex(label, [self], extra_hash)
 
 
 def map_object_graph(objs, start_func, finish_func=None):
@@ -232,63 +154,75 @@ def map_object_graph(objs, start_func, finish_func=None):
     return sorted_objs, child_map, value_map
 
 
-def convert_obj_graph_to_dag(objs, get_parents_func, repr_func=repr, edge_label_func=None):
+def analyze(vertices):
+    sorted_vertices, child_map, _ = map_object_graph(vertices, lambda x: x.parents)
+    return sorted_vertices, child_map
+
+
+def get_edges(objs, child_map=None):
+    if child_map is None:
+        for obj in objs:
+            if not isinstance(obj, Vertex):
+                raise TypeError('Expected Vertex instance; got {}'.format(obj))
+        objs, child_map, _ = map_object_graph(objs, lambda x: x.parents)
+    edges = []
+    for parent_obj in objs:
+        edges += [(parent_obj, child_obj) for child_obj in child_map[parent_obj]]
+    return edges
+
+
+def squish_vertices(vertices):
+    sorted_vertices, child_map = analyze(vertices)
+    vertex_map = {}
+    for vertex in sorted_vertices:
+        is_edge = any(x in vertex_map for x in vertex.parents)
+        if not is_edge:
+            parents = reduce(operator.add, [x.parents for x in vertex.parents], [])
+            new_parents = [vertex_map[x] for x in parents]
+            vertex_map[vertex] = vertex.clone(parents=new_parents)
+    return vertex_map
+
+
+def double_squish_vertices(vertices):
+    sorted_vertices, child_map = analyze(vertices)
+    vertex_map = {}
+    for vertex in sorted_vertices:
+        is_output = any(x in vertex_map for x in vertex.parents)
+        if not is_output:
+            parents = reduce(operator.add, [x.parents for x in vertex.parents], [])
+            is_input = any(x in vertex_map for x in parents)
+            if not is_input:
+                parents = reduce(operator.add, [x.parents for x in parents], [])
+                new_parents = [vertex_map[x] for x in parents]
+                vertex_map[vertex] = vertex.clone(parents=new_parents)
+    return vertex_map
+
+
+def convert_obj_graph_to_dag(objs, get_parents_func, repr_func=repr):
     def start(obj):
         parents = get_parents_func(obj)
-        if isinstance(parents, dict):
-            parents = reduce(operator.add, parents.values(), [])
         return parents
 
     def finish(obj, parent_vertices):
-        parents = get_parents_func(obj)
-        if isinstance(parents, dict):
-            labels = parents.keys()
-            labels = reduce(operator.add, [[k] * len(v) for k, v in parents.items()], [])
-        else:
-            labels = [None] * len(parent_vertices)
-        edges = [v.edge(l) for v, l in zip(parent_vertices, labels)]
-        return Vertex(repr_func(obj), edges)
+        return Vertex(repr_func(obj), parent_vertices)
 
     _, _, value_map = map_object_graph(objs, start, finish)
     return value_map
 
 
-def _get_vertex_or_edge_parents(vertex_or_edge):
-    if isinstance(vertex_or_edge, Vertex):
-        return vertex_or_edge.parents
-    elif isinstance(vertex_or_edge, Edge):
-        return [vertex_or_edge.parent]
-    else:
-        raise TypeError('Expected daglet.Vertex or daglet.Edge instance; got {}'.format(vertex_or_edge))
-
-
-def analyze(vertices):
-    sorted_objs, child_map, _ = map_object_graph(vertices, _get_vertex_or_edge_parents)
-    vertices = [obj for obj in sorted_objs if isinstance(obj, Vertex)]
-    edges = [obj for obj in sorted_objs if isinstance(obj, Edge)]
-    vertex_child_map = {v: child_map[v] for v in vertices}
-    edge_child_map = {e: child_map[e] for e in edges}
-    return vertices, vertex_child_map, edge_child_map
-
-
 class Dag(object):
     def __init__(self, vertices):
-        vertices, vertex_child_map, edge_child_map = analyze(vertices)
+        vertices, child_map = analyze(vertices)
         self.__vertices = vertices
-        self.__vertex_child_map = vertex_child_map
-        self.__edge_child_map = edge_child_map
+        self.__child_map = child_map
 
     @property
     def vertices(self):
         return self.__vertices
 
     @property
-    def vertex_child_map(self):
-        return self.__vertex_child_map
-
-    @property
-    def edge_child_map(self):
-        return self.__edge_child_map
+    def child_map(self):
+        return self.__child_map
 
     def map(self, func):
         out = {}
@@ -297,51 +231,36 @@ class Dag(object):
         return out
 
 
-def _get_vertex_parent_vertices(vertex):
-    return [edge.parent for edge in vertex.parents]
-
-
 def convert_dag_to_obj_graph(vertices, visit_vertex_func):
-    return map_object_graph(vertices, _get_vertex_or_edge_parents, visit_vertex_func)
+    return map_object_graph(vertices, lambda x: x.parents, visit_vertex_func)
 
 
-def invert_dict(d):
+def invert(d):
     return {v: k for k, v in d.items()}
+
+
+def commute(xform1, xform2):
+    return {k: xform2[v] for k, v in xform1.items() if k in xform2}
+
+
+def transform_list(xform, l):
+    return [xform[x] for x in l if x in xform]
+
+
+def transform_keys(key_xform, d):
+    # TODO: figure out how to deal with non-injective mappings
+    return {key_xform[k]: v for k, v in d.items() if k in key_xform}
+
+
+#def map_keys(func, d):
+#    out = {}
+#    for k, v in d.items():
+#        k = func(k)
+#        if k is not None:
+#            out[k] = v
+#    return out
 
 
 # TODO: possibly move to transformations.py.
 #def rebase(downstream_vertices, new_base,
 #    ...
-
-
-
-class Scheduler(object):
-    def __init__(self, vertices):
-        self.__dag = Dag(vertices)
-        self.__ready_edges = set()
-        self.__started_vertices = set()
-        self.__finished_vertices = set()
-
-    def __is_vertex_ready(self, vertex):
-        return all(x in self.__ready_edges for x in vertex.parents)
-
-    def finish(self, vertex):
-        assert vertex in self.__started_vertices
-        assert vertex not in self.__finished_vertices
-        self.__finished_vertices.add(vertex)
-        self.__ready_edges.update(self.__dag.vertex_child_map[vertex])
-
-    def start(self, limit=None):
-        vertices = [x for x in self.__dag.vertices if x not in self.__started_vertices and
-            self.__is_vertex_ready(x)]
-        if limit is not None:
-            vertices = vertices[:limit]
-        self.__started_vertices.update(vertices)
-        return set(vertices)
-
-    @property
-    def done(self):
-        return len(self.__finished_vertices) == len(self.__dag.vertices)
-
-    def running_vertices(self):
-        return self.__started_vertices.difference(self.__finished_vertices)

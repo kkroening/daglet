@@ -20,7 +20,7 @@ _RIGHT_ARROW = '\u2192'
 #    return color
 
 
-def view(vertices, filename=None, show_labels=True, color_func={}.get, rankdir='LR'):
+def view(vertices, filename=None, rankdir='LR', color_func={}.get, edge_label_func={}.get):
     try:
         import graphviz
     except ImportError:
@@ -30,19 +30,21 @@ def view(vertices, filename=None, show_labels=True, color_func={}.get, rankdir='
     if filename is None:
         filename = tempfile.mktemp()
 
-    sorted_vertices, vertex_child_map, edge_child_map = daglet.analyze(vertices)
+    sorted_vertices, vertex_child_map = daglet.analyze(vertices)
     graph = graphviz.Digraph()
     graph.attr(rankdir=rankdir)
 
     for vertex in sorted_vertices:
         #color = _get_vertex_color(vertex)
         color = color_func(vertex) if color_func is not None else None
+        print vertex
         graph.node(str(hash(vertex)), vertex.label, shape='box', style='filled', fillcolor=color)
-        for edge in vertex.parents:
+        for parent_vertex in vertex.parents:
             kwargs = {}
-            if show_labels and edge.label is not None:
-                kwargs['label'] = edge.label
-            upstream_vertex_id = str(hash(edge.parent))
+            edge_label = edge_label_func((parent_vertex, vertex))
+            if edge_label is not None:
+                kwargs['label'] = edge_label
+            upstream_vertex_id = str(hash(parent_vertex))
             downstream_vertex_id = str(hash(vertex))
             graph.edge(upstream_vertex_id, downstream_vertex_id, **kwargs)
 
