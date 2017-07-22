@@ -1,17 +1,10 @@
 from __future__ import unicode_literals
 
-from .view import view
 from ._utils import get_hash_int
 from builtins import object
+from collections import defaultdict
 import copy
 import operator
-
-
-(view)  # silence linter
-
-
-def _quote_arg(arg):
-    return "'{}'".format(str(arg).replace("'", "\\'"))
 
 
 def _arg_kwarg_repr(args=[], kwargs={}):
@@ -115,24 +108,21 @@ class Vertex(object):
         return Vertex(label, [self], extra_hash)
 
 
-def map_object_graph(objs, start_func, finish_func=None):
+def default_get_parents(x):
+    return x.parents
+
+
+def toposort(objs, parent_func=default_get_parents):
     marked_objs = set()
     sorted_objs = []
-    child_map = {}
-    value_map = {}
 
     def visit(obj, child_obj):
         if obj in marked_objs:
             # TODO: optionally break cycles.
             raise RuntimeError('Graph is not a DAG')
 
-        children = child_map.get(obj, set())
-        if child_obj is not None:
-            children.add(child_obj)
-        child_map[obj] = children
-
         if obj not in sorted_objs:
-            parent_objs = start_func(obj)
+            parent_objs = parent_func(obj)
 
             marked_objs.add(obj)
             for parent_obj in parent_objs:
@@ -140,39 +130,126 @@ def map_object_graph(objs, start_func, finish_func=None):
             marked_objs.remove(obj)
 
             sorted_objs.append(obj)
-            parent_values = [value_map[parent_obj] for parent_obj in parent_objs]
-            if finish_func is not None:
-                value = finish_func(obj, parent_values)
-            else:
-                value = None
-            value_map[obj] = value
 
     unvisited_objs = copy.copy(objs)
     while unvisited_objs:
         obj = unvisited_objs.pop()
         visit(obj, None)
-    return sorted_objs, child_map, value_map
+    return sorted_objs
 
 
-def analyze(vertices):
-    sorted_vertices, child_map, _ = map_object_graph(vertices, lambda x: x.parents)
-    return sorted_vertices, child_map
+def transform(objs, vertex_func=None, edge_func=None, parent_func=default_get_parents):
+    if edge_func is None:
+        edge_func = lambda parent_obj, obj, parent_value: parent_value
+    if vertex_func is None:
+        vertex_func = lambda obj, parent_values: None
+
+    sorted_objs = toposort(objs, parent_func)
+
+    vertex_map = {}
+    edge_map = {}
+    for obj in sorted_objs:
+        parent_objs = parent_func(obj)
+        if edge_func is not None:
+            parent_values = []
+            for parent_obj in parent_objs:
+                value = edge_func(parent_obj, obj, vertex_map[parent_obj])
+                edge_map[parent_obj, obj] = value
+                parent_values.append(value)
+        else:
+            parent_values = [vertex_map[parent_obj] for parent_obj in parent_objs]
+        value = vertex_func(obj, parent_values)
+        vertex_map[obj] = value
+
+    return vertex_map, edge_map
 
 
-def get_edges(objs, child_map=None):
-    if child_map is None:
-        for obj in objs:
-            if not isinstance(obj, Vertex):
-                raise TypeError('Expected Vertex instance; got {}'.format(obj))
-        objs, child_map, _ = map_object_graph(objs, lambda x: x.parents)
-    edges = []
-    for parent_obj in objs:
-        edges += [(parent_obj, child_obj) for child_obj in child_map[parent_obj]]
-    return edges
+def transform_vertices(objs, vertex_func, parent_func=default_get_parents):
+    vertex_map, _ = transform(objs, vertex_func, None, parent_func)
+    return vertex_map
 
 
+def transform_edges(objs, edge_func, parent_func=default_get_parents):
+    _, edge_map = transform(objs, None, edge_func, parent_func)
+    return edge_map
+
+
+def get_parent_map(objs, parent_func=default_get_parents):
+    sorted_objs = toposort(objs, parent_func)
+    parent_map = defaultdict(set)
+    for obj in sorted_objs:
+        for parent in parent_func(obj):
+            parent_map[obj].append(parent)
+    return parent_map
+
+
+def get_child_map(objs, parent_func=default_get_parents):
+    sorted_objs = toposort(objs, parent_func)
+    child_map = defaultdict(set)
+    for obj in sorted_objs:
+        for parent in parent_func(obj):
+            child_map[parent].append(obj)
+    return child_map
+
+
+def invert_multimap(multimap):
+    inverted_multimap = defaultdict(set)
+    for key, values in multimap.items():
+        for value in values:
+            inverted_multimap[value].append(key)
+    return inverted_multimap
+
+
+def multimap(mapper, items):
+    """Apply a multimap to a set of items in an iterable.
+
+    Params:
+        mapper(key), mapper[key]: a function or dictionary that maps a key to a list/set of new keys.  If the function
+            returns None or the key is not found in the dictionary, it's assumed to map to the empty set.
+    """
+    if isinstance(mapper, dict):
+        mapper = mapper.get
+    mapped = reduce(operator.add, [mapper(x) for x in items])
+    return [x for x in mapped if x is not None]
+
+
+def multimap_keys(mapper, d, clone_func=None, merge_func=None):
+    """Apply a multimap to a set of keys in a dictionary.
+
+    Params:
+        mapper(key), mapper[key]: a function or dictionary that maps a key to a list/set of new keys.  If the function
+            returns None or the key is not found in the dictionary, it's assumed to map to the empty set.
+        d: a dictionary with keys to be mapped.
+        clone_func(old_key, new_key, value): function to copy values for new keys.
+        merge_func(new_key, old_value_map): if two or more keys map to the same value, resolve conflict and return a
+            single value.  If no ``merge_func`` and a conflict is encountered, an exception is raised.
+    """
+    if isinstance(mapper, dict):
+        key_map = mapper
+    else:
+        key_map = {key: mapper(key) for key in d.keys()}
+
+    if clone_func is None:
+        clone_func = lambda old_key, new_key, value: value
+
+    inverted_key_map = invert_multimap(key_map)
+    new_dict = {}
+    for new_key, old_keys in inverted_key_map.items():
+        if len(old_keys) > 1:
+            if merge_func is None:
+                raise KeyError('Multiple keys map to the same value; must specify `merge_func` to resolve conflict')
+            old_value_map = {k: d[k] for k in old_keys}
+            value = merge_func(new_key, old_value_map)
+        else:
+            old_key = old_keys[0]
+            value = clone_func(old_key, new_key, d[old_key])
+        new_dict[new_key] = value
+    return value
+
+
+'''
 def squish_vertices(vertices):
-    sorted_vertices, child_map = analyze(vertices)
+    sorted_vertices = toposort(vertices)
     vertex_map = {}
     for vertex in sorted_vertices:
         is_edge = any(x in vertex_map for x in vertex.parents)
@@ -184,7 +261,7 @@ def squish_vertices(vertices):
 
 
 def double_squish_vertices(vertices):
-    sorted_vertices, child_map = analyze(vertices)
+    sorted_vertices = toposort(vertices)
     vertex_map = {}
     for vertex in sorted_vertices:
         is_output = any(x in vertex_map for x in vertex.parents)
@@ -198,69 +275,10 @@ def double_squish_vertices(vertices):
     return vertex_map
 
 
-def convert_obj_graph_to_dag(objs, get_parents_func, repr_func=repr):
-    def start(obj):
-        parents = get_parents_func(obj)
-        return parents
-
-    def finish(obj, parent_vertices):
-        return Vertex(repr_func(obj), parent_vertices)
-
-    _, _, value_map = map_object_graph(objs, start, finish)
-    return value_map
-
-
-class Dag(object):
-    def __init__(self, vertices):
-        vertices, child_map = analyze(vertices)
-        self.__vertices = vertices
-        self.__child_map = child_map
-
-    @property
-    def vertices(self):
-        return self.__vertices
-
-    @property
-    def child_map(self):
-        return self.__child_map
-
-    def map(self, func):
-        out = {}
-        for vertex in self.__vertices:
-            out[vertex] = func(vertex)
-        return out
-
-
-def convert_dag_to_obj_graph(vertices, visit_vertex_func):
-    return map_object_graph(vertices, lambda x: x.parents, visit_vertex_func)
-
-
-def invert(d):
-    return {v: k for k, v in d.items()}
-
-
-def commute(xform1, xform2):
-    return {k: xform2[v] for k, v in xform1.items() if k in xform2}
-
-
-def transform_list(xform, l):
-    return [xform[x] for x in l if x in xform]
-
-
-def transform_keys(key_xform, d):
-    # TODO: figure out how to deal with non-injective mappings
-    return {key_xform[k]: v for k, v in d.items() if k in key_xform}
-
-
-#def map_keys(func, d):
-#    out = {}
-#    for k, v in d.items():
-#        k = func(k)
-#        if k is not None:
-#            out[k] = v
-#    return out
-
-
 # TODO: possibly move to transformations.py.
 #def rebase(downstream_vertices, new_base,
 #    ...
+'''
+
+from .view import view
+(view)  # silence linter

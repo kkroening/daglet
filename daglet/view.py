@@ -1,26 +1,12 @@
 from __future__ import unicode_literals
 
-import daglet
 from builtins import str
+import daglet
 import tempfile
 
 
-_RIGHT_ARROW = '\u2192'
-
-
-#def _get_node_color(node):
-#    if isinstance(node, InputNode):
-#        color = '#99cc00'
-#    elif isinstance(node, OutputNode):
-#        color = '#99ccff'
-#    elif isinstance(node, FilterNode):
-#        color = '#ffcc00'
-#    else:
-#        color = None
-#    return color
-
-
-def view(vertices, filename=None, rankdir='LR', color_func={}.get, edge_label_func={}.get):
+def view(objs, filename=None, rankdir='LR', parent_func=daglet.default_get_parents, vertex_color_func={}.get,
+        vertex_label_func={}.get, edge_label_func={}.get):
     try:
         import graphviz
     except ImportError:
@@ -30,22 +16,22 @@ def view(vertices, filename=None, rankdir='LR', color_func={}.get, edge_label_fu
     if filename is None:
         filename = tempfile.mktemp()
 
-    sorted_vertices, vertex_child_map = daglet.analyze(vertices)
+    sorted_objs = daglet.toposort(objs, parent_func)
     graph = graphviz.Digraph()
     graph.attr(rankdir=rankdir)
 
-    for vertex in sorted_vertices:
-        #color = _get_vertex_color(vertex)
-        color = color_func(vertex) if color_func is not None else None
-        print vertex
-        graph.node(str(hash(vertex)), vertex.label, shape='box', style='filled', fillcolor=color)
-        for parent_vertex in vertex.parents:
+    for child in sorted_objs:
+        label = vertex_label_func(child)
+        color = vertex_color_func(child) if vertex_color_func is not None else None
+        graph.node(str(hash(child)), label, shape='box', style='filled', fillcolor=color)
+
+        for parent in parent_func(child):
             kwargs = {}
-            edge_label = edge_label_func((parent_vertex, vertex))
+            edge_label = edge_label_func((parent, child))
             if edge_label is not None:
                 kwargs['label'] = edge_label
-            upstream_vertex_id = str(hash(parent_vertex))
-            downstream_vertex_id = str(hash(vertex))
-            graph.edge(upstream_vertex_id, downstream_vertex_id, **kwargs)
+            upstream_obj_id = str(hash(parent))
+            downstream_obj_id = str(hash(child))
+            graph.edge(upstream_obj_id, downstream_obj_id, **kwargs)
 
     graph.view(filename)

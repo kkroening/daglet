@@ -1,8 +1,6 @@
 from __future__ import unicode_literals
 
 import daglet
-import itertools
-import json
 import subprocess
 
 
@@ -113,6 +111,130 @@ def test_vertex_transplant():
     assert daglet.Vertex().transplant([v2]).parents == [v2]
 
 
+def test_toposort():
+    v1 = daglet.Vertex()
+    v2 = v1.vertex()
+    assert daglet.toposort([]) == []
+    assert daglet.toposort([v1]) == [v1]
+    assert daglet.toposort([v2]) == [v1, v2]
+
+    v3 = daglet.Vertex('v3')
+    v4 = v3.vertex('v4')
+    v5 = v3.vertex('v5')
+    v6 = v5.vertex('v6')
+    v7 = v5.vertex('v7')
+    v8 = daglet.Vertex('v8')
+    v9 = daglet.Vertex('v9', [v4, v6, v7])
+    v10 = daglet.Vertex('v10', [v3, v8])
+    v11 = daglet.Vertex('v11')
+    sorted_vertices = daglet.toposort([v4, v9, v10, v11])
+    assert sorted_vertices == [v11, v3, v8, v10, v5, v7, v6, v4, v9]
+
+
+def test_transform():
+    v1 = daglet.Vertex()
+    v2 = v1.vertex()
+    assert daglet.transform([]) == ({}, {})
+    assert daglet.transform([v1]) == ({v1: None}, {})
+    assert daglet.transform([v2]) == ({v1: None, v2: None}, {(v1, v2): None})
+    vertex_dummy_func = lambda obj, parent_values: (obj, parent_values)
+    edge_dummy_func = lambda parent, child, parent_value: 'test'
+    assert daglet.transform([v2], vertex_dummy_func, edge_dummy_func) == (
+        {
+            v1: (v1, []),
+            v2: (v2, ['test'])
+        },
+        {
+            (v1, v2): 'test'
+        }
+    )
+
+    v3 = daglet.Vertex('v3')
+    v4 = v3.vertex('v4')
+    v5 = v3.vertex('v5')
+    v6 = v5.vertex('v6')
+    v7 = v5.vertex('v7')
+    v8 = daglet.Vertex('v8')
+    v9 = daglet.Vertex('v9', [v4, v6, v7])
+    v10 = daglet.Vertex('v10', [v3, v8])
+    v11 = daglet.Vertex('v11')
+    vertex_rank_func = lambda obj, parent_ranks: max(parent_ranks) + 1 if len(parent_ranks) else 0
+    vertex_map, edge_map = daglet.transform([v4, v9, v10, v11], vertex_rank_func)
+    assert vertex_map == {
+        v3: 0,
+        v4: 1,
+        v5: 1,
+        v6: 2,
+        v7: 2,
+        v8: 0,
+        v9: 3,
+        v10: 1,
+        v11: 0,
+    }
+    assert edge_map == {
+        (v3, v4): 0,
+        (v3, v5): 0,
+        (v3, v10): 0,
+        (v4, v9): 1,
+        (v5, v6): 1,
+        (v5, v7): 1,
+        (v6, v9): 2,
+        (v7, v9): 2,
+        (v8, v10): 0,
+    }
+
+    vertex_labels = {
+        v3: 'v3',
+        v4: 'v4',
+        v5: 'v5',
+        v6: 'v6',
+        v7: 'v7',
+        v8: 'v8',
+        v9: 'v9',
+        v10: 'v10',
+        v11: 'v11',
+    }
+    vertex_colors = {
+        v3: 'red',
+        v4: 'yellow',
+        v5: 'purple',
+        v6: 'purple',
+        v7: 'lightblue',
+        v8: 'green',
+        v9: 'white',
+        v11: 'orange',
+    }
+
+    #daglet.view([v4, v9, v10, v11], vertex_label_func=vertex_labels.get, vertex_color_func=vertex_colors.get)
+
+
+def test_git():
+    repo_dir = '.'
+    def get_parent_hashes(commit_hash):
+        return (subprocess
+            .check_output(['git', 'rev-list', '--parents', '-n1', commit_hash], cwd=repo_dir)
+            .strip()
+            .split(' ')[1:]
+        )
+
+    class Commit(object):
+        def __init__(self, commit_hash, parents):
+            self.commit_hash = commit_hash
+            self.parents = parents
+            self.log = subprocess.check_output(['git', 'log', '-n1', '--pretty=short', commit_hash], cwd=repo_dir)
+
+        def get_parents(self):
+            return self.parents
+
+        def get_log(self):
+            return self.log
+
+    vertex_map = daglet.transform_vertices(['HEAD'], Commit, get_parent_hashes)
+    daglet.view(vertex_map.values(), rankdir=None, parent_func=Commit.get_parents, vertex_label_func=Commit.get_log,
+        vertex_color_func=lambda x: 'lightblue')
+
+
+''''
 def test_analyze():
     v1 = daglet.Vertex()
     v2 = v1.vertex()
@@ -277,19 +399,4 @@ def test_composition():
     color_map = daglet.transform_keys(xform1, color_map)
     color_map = daglet.transform_keys(xform2, color_map)
     daglet.view(xform2.values(), color_func=color_map.get, edge_label_func=edge_label_map.get)
-
-
-def test_git():
-    repo_dir = '.'
-    def get_parent_hashes(commit_hash):
-        return (subprocess
-            .check_output(['git', 'rev-list', '--parents', '-n1', commit_hash], cwd=repo_dir)
-            .strip()
-            .split(' ')[1:]
-        )
-
-    def get_commit_repr(commit_hash):
-        return subprocess.check_output(['git', 'log', '-n1', '--pretty=short', commit_hash], cwd=repo_dir)
-
-    dag = daglet.convert_obj_graph_to_dag(['HEAD'], get_parent_hashes, get_commit_repr).values()
-    #daglet.view(dag, rankdir=None)
+'''
