@@ -5,7 +5,7 @@ import daglet
 import tempfile
 
 
-def view(objs, filename=None, rankdir='LR', parent_func=daglet.default_get_parents, vertex_color_func={}.get,
+def view(objs, parent_func, filename=None, rankdir='LR', vertex_color_func={}.get,
         vertex_label_func={}.get, edge_label_func={}.get):
     try:
         import graphviz

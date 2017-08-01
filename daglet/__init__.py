@@ -112,16 +112,16 @@ def default_get_parents(x):
     return x.parents
 
 
-def toposort(objs, parent_func=default_get_parents):
+def toposort(objs, parent_func, tree=False):
     marked_objs = set()
     sorted_objs = []
 
     def visit(obj, child_obj):
-        if obj in marked_objs:
+        if not tree and obj in marked_objs:
             # TODO: optionally break cycles.
-            raise RuntimeError('Graph is not a DAG')
+            raise RuntimeError('Graph is not a DAG; recursively encountered {}'.format(obj))
 
-        if obj not in sorted_objs:
+        if tree or obj not in sorted_objs:
             parent_objs = parent_func(obj)
 
             marked_objs.add(obj)
@@ -138,43 +138,46 @@ def toposort(objs, parent_func=default_get_parents):
     return sorted_objs
 
 
-def transform(objs, vertex_func=None, edge_func=None, parent_func=default_get_parents):
-    if edge_func is None:
-        edge_func = lambda parent_obj, obj, parent_value: parent_value
+def transform(objs, parent_func, vertex_func=None, edge_func=None, vertex_map={}):
     if vertex_func is None:
         vertex_func = lambda obj, parent_values: None
+    if vertex_map is not None:
+        old_parent_func = parent_func
+        parent_func = lambda x: old_parent_func(x) if x not in vertex_map else []
+    if edge_func is None:
+        edge_func = lambda parent_obj, obj, parent_value: parent_value
 
     sorted_objs = toposort(objs, parent_func)
 
-    vertex_map = {}
-    edge_map = {}
+    new_vertex_map = {}
+    new_edge_map = {}
     for obj in sorted_objs:
-        parent_objs = parent_func(obj)
-        if edge_func is not None:
+        if obj in vertex_map:
+            value = vertex_map[obj]
+        else:
+            parent_objs = parent_func(obj)
             parent_values = []
             for parent_obj in parent_objs:
-                value = edge_func(parent_obj, obj, vertex_map[parent_obj])
-                edge_map[parent_obj, obj] = value
+                value = edge_func(parent_obj, obj, new_vertex_map[parent_obj])
+                new_edge_map[parent_obj, obj] = value
                 parent_values.append(value)
-        else:
-            parent_values = [vertex_map[parent_obj] for parent_obj in parent_objs]
-        value = vertex_func(obj, parent_values)
-        vertex_map[obj] = value
+            value = vertex_func(obj, parent_values)
+        new_vertex_map[obj] = value
 
-    return vertex_map, edge_map
+    return new_vertex_map, new_edge_map
 
 
-def transform_vertices(objs, vertex_func, parent_func=default_get_parents):
-    vertex_map, _ = transform(objs, vertex_func, None, parent_func)
+def transform_vertices(objs, parent_func, vertex_func, vertex_map={}):
+    vertex_map, _ = transform(objs, parent_func, vertex_func, None, vertex_map)
     return vertex_map
 
 
-def transform_edges(objs, edge_func, parent_func=default_get_parents):
-    _, edge_map = transform(objs, None, edge_func, parent_func)
+def transform_edges(objs, parent_func, edge_func):
+    _, edge_map = transform(objs, parent_func, None, edge_func)
     return edge_map
 
 
-def get_parent_map(objs, parent_func=default_get_parents):
+def get_parent_map(objs, parent_func):
     sorted_objs = toposort(objs, parent_func)
     parent_map = defaultdict(set)
     for obj in sorted_objs:
@@ -183,51 +186,50 @@ def get_parent_map(objs, parent_func=default_get_parents):
     return parent_map
 
 
-def get_child_map(objs, parent_func=default_get_parents):
+def get_child_map(objs, parent_func):
     sorted_objs = toposort(objs, parent_func)
     child_map = defaultdict(set)
     for obj in sorted_objs:
         for parent in parent_func(obj):
-            child_map[parent].append(obj)
+            child_map[parent].add(obj)
     return child_map
+
+
+def invert_map(map_):
+    """Inverts a mapping and produces a multimap to gracefully deal with non-injective mappings."""
+    inverted_multimap = defaultdict(set)
+    for key, value in map_.items():
+        inverted_multimap[value].add(key)
+    return inverted_multimap
 
 
 def invert_multimap(multimap):
     inverted_multimap = defaultdict(set)
     for key, values in multimap.items():
         for value in values:
-            inverted_multimap[value].append(key)
+            inverted_multimap[value].add(key)
     return inverted_multimap
 
 
-def multimap(mapper, items):
-    """Apply a multimap to a set of items in an iterable.
-
-    Params:
-        mapper(key), mapper[key]: a function or dictionary that maps a key to a list/set of new keys.  If the function
-            returns None or the key is not found in the dictionary, it's assumed to map to the empty set.
-    """
-    if isinstance(mapper, dict):
-        mapper = mapper.get
-    mapped = reduce(operator.add, [mapper(x) for x in items])
-    return [x for x in mapped if x is not None]
-
-
-def multimap_keys(mapper, d, clone_func=None, merge_func=None):
+def apply_multi_mapping(multimap, d, clone_func=None, merge_func=None):
     """Apply a multimap to a set of keys in a dictionary.
 
+    TODO: add delete_func.
+    TODO: add create_func and call it on any None->[a,b,c...] mapping.
+
     Params:
-        mapper(key), mapper[key]: a function or dictionary that maps a key to a list/set of new keys.  If the function
-            returns None or the key is not found in the dictionary, it's assumed to map to the empty set.
+        multimap(key), multimap[key]: a function or dictionary that maps a key to a new key or list/set of new keys.
+            If the function returns None or the key is not found in the dictionary, it's assumed to map to the empty
+            set.
         d: a dictionary with keys to be mapped.
         clone_func(old_key, new_key, value): function to copy values for new keys.
         merge_func(new_key, old_value_map): if two or more keys map to the same value, resolve conflict and return a
             single value.  If no ``merge_func`` and a conflict is encountered, an exception is raised.
     """
-    if isinstance(mapper, dict):
-        key_map = mapper
+    if isinstance(multimap, dict):
+        key_map = multimap
     else:
-        key_map = {key: mapper(key) for key in d.keys()}
+        key_map = {key: multimap(key) for key in d.keys()}
 
     if clone_func is None:
         clone_func = lambda old_key, new_key, value: value
@@ -241,10 +243,23 @@ def multimap_keys(mapper, d, clone_func=None, merge_func=None):
             old_value_map = {k: d[k] for k in old_keys}
             value = merge_func(new_key, old_value_map)
         else:
-            old_key = old_keys[0]
+            old_key = list(old_keys)[0]
             value = clone_func(old_key, new_key, d[old_key])
         new_dict[new_key] = value
-    return value
+    return new_dict
+
+
+def apply_mapping(map_, d, clone_func=None, merge_func=None):
+    if isinstance(map_, dict):
+        multimap = {k: [v] for k, v in map_.items()}
+    else:
+        multimap = {k: map_(k) for k in d.keys()}
+    return apply_multi_mapping(multimap, d, clone_func, merge_func)
+
+
+def get_edge_map(vertex_map, source_parent_func, dest_parent_func):
+    #raise NotImplementedError()
+    return {}
 
 
 '''
