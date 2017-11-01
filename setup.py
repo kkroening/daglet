@@ -5,6 +5,38 @@ version = '0.0.1'
 download_url = 'https://github.com/kkroening/daglet/archive/v{}.zip'.format(version)
 
 
+keywords = [
+    'acyclic'
+    'analyze',
+    'bfs',
+    'breadth-first',
+    'connected',
+    'cycle',
+    'dag',
+    'depth-first',
+    'dfs',
+    'dijkstra',
+    'directed',
+    'dsp',
+    'edge',
+    'graph',
+    'hamiltonian',
+    'routing',
+    'search',
+    'sort',
+    'spanning',
+    'spanning',
+    'stream',
+    'structure',
+    'topological',
+    'topology',
+    'toposort',
+    'undirected',
+    'vertex',
+    'vertices',
+]
+
+
 setup(
     name='daglet',
     packages=['daglet'],
@@ -16,7 +48,7 @@ setup(
     author_email='karlk@kralnet.us',
     url='https://github.com/kkroening/daglet',
     download_url=download_url,
-    keywords=[],
+    keywords=keywords,
     long_description='DAG tools for Python',
     install_requires=['future'],
     classifiers=[
