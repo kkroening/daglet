@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+from builtins import object
+from builtins import range
 from daglet._utils import get_hash_int
+from functools import reduce
+from past.builtins import basestring
 from textwrap import dedent
 import copy
 import daglet
