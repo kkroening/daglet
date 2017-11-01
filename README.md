@@ -25,6 +25,15 @@ It's also possible to clone the source and put it on your python path (`$PYTHONP
 >>> import daglet
 ```
 
+## Running tests
+
+```
+$ virtualenv venv
+$ . venv/bin/activate
+(venv) $ pip install -r requirements.txt
+(venv) $ pytest
+```
+
 ## [API Reference](https://kkroening.github.io/daglet/)
 
 API documentation is automatically generated from python docstrings and hosted on github pages: https://kkroening.github.io/daglet/
