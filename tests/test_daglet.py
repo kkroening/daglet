@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 
 from builtins import object
 from builtins import range
-from daglet._utils import get_hash_int
+from daglet._utils import get_hash_int, get_hash
 from functools import reduce
 from past.builtins import basestring
 from textwrap import dedent
@@ -11,6 +11,12 @@ import copy
 import daglet
 import operator
 import subprocess
+
+
+def test_get_hash():
+    assert get_hash(None) == '6adf97f83acf6453d4a6a4b1070f3754'
+    assert get_hash(5) == 'e4da3b7fbbce2345d7772b0674a318d5'
+    assert get_hash({'a': 'b'}) == '31ee3af152948dc06066ec1a7a4c5f31'
 
 
 def test_vertex_parents():
@@ -32,9 +38,14 @@ def test_vertex_label():
 
 
 def test_vertex_hash():
-    assert isinstance(hash(daglet.Vertex('v1')), int)
-    assert hash(daglet.Vertex('v1')) == hash(daglet.Vertex('v1'))
-    assert hash(daglet.Vertex('v1')) != hash(daglet.Vertex('v2'))
+    v1 = daglet.Vertex('v1')
+    v2 = daglet.Vertex('v2', [v1])
+    assert isinstance(hash(v1), int)
+    assert hash(v1) == 352423289548818779
+    assert hash(v2) == 5230371954595182985
+    assert hash(v1) == hash(daglet.Vertex('v1'))
+    assert hash(v2) != hash(v1)
+    assert hash(v1) != hash(daglet.Vertex('v3'))
 
 
 def test_vertex_extra_hash():
@@ -102,9 +113,9 @@ def test_vertex_get_repr():
     v2 = daglet.Vertex('v2', parents=[v1])
     v3 = v2.vertex('v3')
     assert v1.get_repr() == repr(v1)
-    assert repr(v1) == "daglet.Vertex({!r}) <{}>".format('v1', v1.short_hash)
-    assert repr(v3) == "daglet.Vertex({!r}, ...) <{}>".format('v3', v3.short_hash)
-    assert v3.get_repr(include_hash=False) == "daglet.Vertex({!r}, ...)".format('v3')
+    assert repr(v1) == "daglet.Vertex('{}') <{}>".format('v1', v1.short_hash)
+    assert repr(v3) == "daglet.Vertex('{}', ...) <{}>".format('v3', v3.short_hash)
+    assert v3.get_repr(include_hash=False) == "daglet.Vertex('{}', ...)".format('v3')
     assert daglet.Vertex().get_repr(include_hash=False) == 'daglet.Vertex()'
     assert daglet.Vertex(extra_hash=5).get_repr(include_hash=False) == 'daglet.Vertex(...)'
     assert v2.vertex().get_repr(include_hash=False) == 'daglet.Vertex(...)'
@@ -138,7 +149,7 @@ def test_toposort():
     v10 = daglet.Vertex('v10', [v3, v8])
     v11 = daglet.Vertex('v11')
     sorted_vertices = daglet.toposort([v4, v9, v10, v11], get_parents)
-    assert sorted_vertices == [v11, v3, v8, v10, v5, v7, v6, v4, v9]
+    assert sorted_vertices == [v11, v8, v3, v10, v5, v7, v4, v6, v9]
 
 
 def test_transform():
@@ -225,6 +236,7 @@ def test_git():
     def get_parent_hashes(commit_hash):
         return (subprocess
             .check_output(['git', 'rev-list', '--parents', '-n1', commit_hash], cwd=repo_dir)
+            .decode()
             .strip()
             .split(' ')[1:]
         )

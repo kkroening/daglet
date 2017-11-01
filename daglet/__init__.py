@@ -29,7 +29,7 @@ class Vertex(object):
         self.__parents = parents
         self.__label = copy.copy(label)
         self.__extra_hash = copy.copy(extra_hash)
-        self.__hash = get_hash_int([label, parents, extra_hash])
+        self.__hash = get_hash_int([label, parents, extra_hash]) % (2**63)
 
     @property
     def parents(self):
@@ -71,7 +71,10 @@ class Vertex(object):
     def get_repr(self, include_hash=True):
         args = []
         if self.__label is not None:
-            args.append(repr(self.__label))
+            label_text = repr(self.__label)
+            if label_text.startswith('u'):
+                label_text = label_text[1:]
+            args.append(label_text)
         if self.__parents or self.__extra_hash:
             args.append('...')
         ret = 'daglet.Vertex({})'.format(_arg_kwarg_repr(args))
@@ -105,10 +108,6 @@ class Vertex(object):
             ```
         """
         return Vertex(label, [self], extra_hash)
-
-
-def default_get_parents(x):
-    return x.parents
 
 
 def toposort(objs, parent_func, tree=False):
