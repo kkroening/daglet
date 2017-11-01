@@ -4,7 +4,6 @@ from ._utils import get_hash_int
 from builtins import object
 from collections import defaultdict
 import copy
-import operator
 
 
 def _arg_kwarg_repr(args=[], kwargs={}):
@@ -194,106 +193,6 @@ def get_child_map(objs, parent_func):
             child_map[parent].add(obj)
     return child_map
 
-
-def invert_map(map_):
-    """Inverts a mapping and produces a multimap to gracefully deal with non-injective mappings."""
-    inverted_multimap = defaultdict(set)
-    for key, value in map_.items():
-        inverted_multimap[value].add(key)
-    return inverted_multimap
-
-
-def invert_multimap(multimap):
-    inverted_multimap = defaultdict(set)
-    for key, values in multimap.items():
-        for value in values:
-            inverted_multimap[value].add(key)
-    return inverted_multimap
-
-
-def apply_multi_mapping(multimap, d, clone_func=None, merge_func=None):
-    """Apply a multimap to a set of keys in a dictionary.
-
-    TODO: add delete_func.
-    TODO: add create_func and call it on any None->[a,b,c...] mapping.
-
-    Params:
-        multimap(key), multimap[key]: a function or dictionary that maps a key to a new key or list/set of new keys.
-            If the function returns None or the key is not found in the dictionary, it's assumed to map to the empty
-            set.
-        d: a dictionary with keys to be mapped.
-        clone_func(old_key, new_key, value): function to copy values for new keys.
-        merge_func(new_key, old_value_map): if two or more keys map to the same value, resolve conflict and return a
-            single value.  If no ``merge_func`` and a conflict is encountered, an exception is raised.
-    """
-    if isinstance(multimap, dict):
-        key_map = multimap
-    else:
-        key_map = {key: multimap(key) for key in d.keys()}
-
-    if clone_func is None:
-        clone_func = lambda old_key, new_key, value: value
-
-    inverted_key_map = invert_multimap(key_map)
-    new_dict = {}
-    for new_key, old_keys in inverted_key_map.items():
-        if len(old_keys) > 1:
-            if merge_func is None:
-                raise KeyError('Multiple keys map to the same value; must specify `merge_func` to resolve conflict')
-            old_value_map = {k: d[k] for k in old_keys}
-            value = merge_func(new_key, old_value_map)
-        else:
-            old_key = list(old_keys)[0]
-            value = clone_func(old_key, new_key, d[old_key])
-        new_dict[new_key] = value
-    return new_dict
-
-
-def apply_mapping(map_, d, clone_func=None, merge_func=None):
-    if isinstance(map_, dict):
-        multimap = {k: [v] for k, v in map_.items()}
-    else:
-        multimap = {k: map_(k) for k in d.keys()}
-    return apply_multi_mapping(multimap, d, clone_func, merge_func)
-
-
-def get_edge_map(vertex_map, source_parent_func, dest_parent_func):
-    #raise NotImplementedError()
-    return {}
-
-
-'''
-def squish_vertices(vertices):
-    sorted_vertices = toposort(vertices)
-    vertex_map = {}
-    for vertex in sorted_vertices:
-        is_edge = any(x in vertex_map for x in vertex.parents)
-        if not is_edge:
-            parents = reduce(operator.add, [x.parents for x in vertex.parents], [])
-            new_parents = [vertex_map[x] for x in parents]
-            vertex_map[vertex] = vertex.clone(parents=new_parents)
-    return vertex_map
-
-
-def double_squish_vertices(vertices):
-    sorted_vertices = toposort(vertices)
-    vertex_map = {}
-    for vertex in sorted_vertices:
-        is_output = any(x in vertex_map for x in vertex.parents)
-        if not is_output:
-            parents = reduce(operator.add, [x.parents for x in vertex.parents], [])
-            is_input = any(x in vertex_map for x in parents)
-            if not is_input:
-                parents = reduce(operator.add, [x.parents for x in parents], [])
-                new_parents = [vertex_map[x] for x in parents]
-                vertex_map[vertex] = vertex.clone(parents=new_parents)
-    return vertex_map
-
-
-# TODO: possibly move to transformations.py.
-#def rebase(downstream_vertices, new_base,
-#    ...
-'''
 
 from .view import view
 (view)  # silence linter

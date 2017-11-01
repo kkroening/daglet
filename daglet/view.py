@@ -21,9 +21,10 @@ def view(objs, parent_func, filename=None, rankdir='LR', vertex_color_func={}.ge
     graph.attr(rankdir=rankdir)
 
     for child in sorted_objs:
+        id = str(hash(child))
         label = vertex_label_func(child)
         color = vertex_color_func(child) if vertex_color_func is not None else None
-        graph.node(str(hash(child)), label, shape='box', style='filled', fillcolor=color)
+        graph.node(id, label, shape='box', style='filled', fillcolor=color)
 
         for parent in parent_func(child):
             kwargs = {}
