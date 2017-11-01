@@ -5,9 +5,14 @@
 
 ## Overview
 
+`daglet` standardizes common directed acyclic graph operations in a functional manner:
+- Topological sorting
+- Transformations
+- Vertex/edge representation
+- Graph visualization
+- Graph diffing / change detection
 
-## Quickstart
-
+The library is designed in such a way that these features can be utilized á la carte, and for the most part is a set of pure functions along with an immutable `Vertex` representation.
 
 ## Installation
 
@@ -17,11 +22,11 @@ The easiest way to acquire the latest version of `daglet` is through pip:
 pip install daglet
 ```
 
-It's also possible to clone the source and put it on your python path (`$PYTHONPATH`, `sys.path`, etc.):
+Alternatively, it's possible to clone the source and put it on your python path (`$PYTHONPATH`, `sys.path`, etc.):
 ```
-> git clone git@github.com:kkroening/daglet.git
-> export PYTHONPATH=${PYTHONPATH}:daglet
-> python
+$ git clone git@github.com:kkroening/daglet.git
+$ export PYTHONPATH=${PYTHONPATH}:daglet
+$ python
 >>> import daglet
 ```
 
@@ -40,8 +45,8 @@ API documentation is automatically generated from python docstrings and hosted o
 
 Alternatively, standard python help is available, such as at the python REPL prompt as follows:
 ```
-import daglet
-help(daglet)
+>>> import daglet
+>>> help(daglet)
 ```
 
 ## Contributing
