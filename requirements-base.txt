@@ -1,4 +1,5 @@
 future
+graphviz
 pytest
 pytest-runner
 sphinx
