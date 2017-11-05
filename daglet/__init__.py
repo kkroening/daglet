@@ -35,6 +35,9 @@ class Vertex(object):
     def parents(self):
         return self.__parents
 
+    def get_parents(self):
+        return self.parents
+
     @property
     def label(self):
         return self.__label
@@ -110,7 +113,16 @@ class Vertex(object):
         return Vertex(label, [self], extra_hash)
 
 
-def toposort(objs, parent_func, tree=False):
+def __check_parent_func(objs, parent_func):
+    if parent_func is None:
+        if any(not isinstance(obj, Vertex) for obj in objs):
+            raise TypeError('`parent_func` must be specified if objects are not daglet.Vertex instances')
+        parent_func = Vertex.get_parents
+    return parent_func
+
+
+def toposort(objs, parent_func=None, tree=False):
+    parent_func = __check_parent_func(objs, parent_func)
     marked_objs = set()
     sorted_objs = []
 
@@ -136,7 +148,8 @@ def toposort(objs, parent_func, tree=False):
     return sorted_objs
 
 
-def transform(objs, parent_func, vertex_func=None, edge_func=None, vertex_map={}):
+def transform(objs, parent_func=None, vertex_func=None, edge_func=None, vertex_map={}):
+    parent_func = __check_parent_func(objs, parent_func)
     if vertex_func is None:
         vertex_func = lambda obj, parent_values: None
     if vertex_map is not None:
