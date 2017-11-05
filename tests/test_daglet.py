@@ -13,13 +13,13 @@ import operator
 import subprocess
 
 
-def test_get_hash():
+def test__get_hash():
     assert get_hash(None) == '6adf97f83acf6453d4a6a4b1070f3754'
     assert get_hash(5) == 'e4da3b7fbbce2345d7772b0674a318d5'
     assert get_hash({'a': 'b'}) == '31ee3af152948dc06066ec1a7a4c5f31'
 
 
-def test_vertex_parents():
+def test__vertex_parents():
     v1 = daglet.Vertex()
     v2 = daglet.Vertex()
     v3 = v1.vertex('v3')
@@ -32,12 +32,12 @@ def test_vertex_parents():
     assert daglet.Vertex(parents=[v5, v3]).parents == sorted([v3, v5])
 
 
-def test_vertex_label():
+def test__vertex_label():
     assert daglet.Vertex().label == None
     assert daglet.Vertex('v1').label == 'v1'
 
 
-def test_vertex_hash():
+def test__vertex_hash():
     v1 = daglet.Vertex('v1')
     v2 = daglet.Vertex('v2', [v1])
     assert isinstance(hash(v1), int)
@@ -48,12 +48,12 @@ def test_vertex_hash():
     assert hash(v1) != hash(daglet.Vertex('v3'))
 
 
-def test_vertex_extra_hash():
+def test__vertex_extra_hash():
     assert daglet.Vertex().extra_hash == None
     assert daglet.Vertex(extra_hash=5).extra_hash == 5
 
 
-def test_vertex_eq():
+def test__vertex_eq():
     assert daglet.Vertex() == daglet.Vertex()
     assert daglet.Vertex('v1') == daglet.Vertex('v1')
     assert daglet.Vertex('v1') != daglet.Vertex('v2')
@@ -73,7 +73,7 @@ def test_vertex_eq():
     assert daglet.Vertex(parents=[v1, v2]) == daglet.Vertex(parents=[v2, v1])
 
 
-def test_vertex_cmp():
+def test__vertex_cmp():
     v1 = daglet.Vertex('v1')
     v2 = daglet.Vertex('v2')
     vs = sorted([v1, v2])
@@ -97,7 +97,7 @@ def test_vertex_cmp():
     assert not (va > vb)
 
 
-def test_vertex_short_hash():
+def test__vertex_short_hash():
     h1 = daglet.Vertex('v1').short_hash
     h2 = daglet.Vertex('v1').short_hash
     h3 = daglet.Vertex('v2').short_hash
@@ -108,7 +108,7 @@ def test_vertex_short_hash():
     assert h1 != h3
 
 
-def test_vertex_get_repr():
+def test__vertex_get_repr():
     v1 = daglet.Vertex('v1')
     v2 = daglet.Vertex('v2', parents=[v1])
     v3 = v2.vertex('v3')
@@ -122,16 +122,16 @@ def test_vertex_get_repr():
     assert daglet.Vertex(0).get_repr(include_hash=False) == 'daglet.Vertex(0)'
 
 
-def test_vertex_clone():
+def test__vertex_clone():
     assert daglet.Vertex().clone(label='v2').label == 'v2'
 
 
-def test_vertex_transplant():
+def test__vertex_transplant():
     v2 = daglet.Vertex('v2')
     assert daglet.Vertex().transplant([v2]).parents == [v2]
 
 
-def test_toposort():
+def test__toposort():
     get_parents = lambda x: x.parents
     v1 = daglet.Vertex()
     v2 = v1.vertex()
@@ -152,7 +152,7 @@ def test_toposort():
     assert sorted_vertices == [v11, v8, v3, v10, v5, v7, v4, v6, v9]
 
 
-def test_transform():
+def test__transform():
     get_parents = lambda x: x.parents
     v1 = daglet.Vertex()
     v2 = v1.vertex()
@@ -205,60 +205,70 @@ def test_transform():
         (v8, v10): 0,
     }
 
-    vertex_labels = {
-        v3: 'v3',
-        v4: 'v4',
-        v5: 'v5',
-        v6: 'v6',
-        v7: 'v7',
-        v8: 'v8',
-        v9: 'v9',
-        v10: 'v10',
-        v11: 'v11',
-    }
-    vertex_colors = {
-        v3: 'red',
-        v4: 'yellow',
-        v5: 'purple',
-        v6: 'purple',
-        v7: 'lightblue',
-        v8: 'green',
-        v9: 'white',
-        v11: 'orange',
-    }
+    debug = False
+    if debug:
+        vertex_labels = {
+            v3: 'v3',
+            v4: 'v4',
+            v5: 'v5',
+            v6: 'v6',
+            v7: 'v7',
+            v8: 'v8',
+            v9: 'v9',
+            v10: 'v10',
+            v11: 'v11',
+        }
+        vertex_colors = {
+            v3: 'red',
+            v4: 'yellow',
+            v5: 'purple',
+            v6: 'purple',
+            v7: 'lightblue',
+            v8: 'green',
+            v9: 'white',
+            v11: 'orange',
+        }
+        daglet.view([v4, v9, v10, v11], get_parents, vertex_label_func=vertex_labels.get,
+            vertex_color_func=vertex_colors.get)
 
-    #daglet.view([v4, v9, v10, v11], get_parents, vertex_label_func=vertex_labels.get,
-    #    vertex_color_func=vertex_colors.get)
 
+def test__example__git():
+    REPO_DIR = '.'
 
-def test_git():
-    repo_dir = '.'
     def get_parent_hashes(commit_hash):
         return (subprocess
-            .check_output(['git', 'rev-list', '--parents', '-n1', commit_hash], cwd=repo_dir)
+            .check_output(['git', 'rev-list', '--parents', '-n1', commit_hash], cwd=REPO_DIR)
             .decode()
             .strip()
             .split(' ')[1:]
         )
 
+    def get_commit_message(commit_hash):
+        return subprocess.check_output(['git', 'log', '-n1', '--pretty=short', commit_hash], cwd=REPO_DIR)
+
     class Commit(object):
         def __init__(self, commit_hash, parents):
             self.commit_hash = commit_hash
             self.parents = parents
-            self.log = subprocess.check_output(['git', 'log', '-n1', '--pretty=short', commit_hash], cwd=repo_dir)
-
-        def get_parents(self):
-            return self.parents
-
-        def get_log(self):
-            return self.log
+            self.log = get_commit_message(commit_hash)
 
     vertex_map = daglet.transform_vertices(['HEAD'], get_parent_hashes, Commit)
-    #daglet.view(vertex_map.values(), rankdir=None, parent_func=Commit.get_parents, vertex_label_func=Commit.get_log,
-    #    vertex_color_func=lambda x: 'lightblue')
+    assert 'HEAD' in vertex_map
+    assert all(isinstance(x, basestring) for x in vertex_map.keys())
+    assert all(isinstance(x, Commit) for x in vertex_map.values())
+
+    debug = False
+    if debug:
+        daglet.view(
+            vertex_map.values(),
+            rankdir=None,
+            parent_func=lambda x: x.parents,
+            vertex_label_func=lambda x: x.log,
+            vertex_color_func=lambda x: 'lightblue',
+        )
 
 
-def test_vdom():
+def test__example__vdom():
     class TextBuffer(object):
         def __init__(self, row_count, col_count):
             self.rows = [' ' * col_count] * row_count
