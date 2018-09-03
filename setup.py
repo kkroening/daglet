@@ -1,16 +1,20 @@
 from setuptools import setup
 
 
-version = '0.0.1'
+version = '0.1.0'
 download_url = 'https://github.com/kkroening/daglet/archive/v{}.zip'.format(version)
 
 
 keywords = [
+    'actor',
     'acyclic'
     'analyze',
+    'async',
     'bfs',
     'breadth-first',
+    'concurrent sequential processes',
     'connected',
+    'csp',
     'cycle',
     'dag',
     'depth-first',
@@ -19,8 +23,17 @@ keywords = [
     'directed',
     'dsp',
     'edge',
+    'fp',
+    'frp',
+    'functional programming',
+    'functional reactive programming',
+    'functional',
     'graph',
     'hamiltonian',
+    'monad',
+    'pipe',
+    'pipeline',
+    'pipes',
     'routing',
     'search',
     'sort',
